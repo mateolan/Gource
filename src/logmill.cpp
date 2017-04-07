@@ -25,6 +25,10 @@
 #include "formats/bzr.h"
 #include "formats/svn.h"
 #include "formats/apache.h"
+#include "formats/cvs-exp.h"
+#include "formats/cvs2cl.h"
+
+#include <boost/filesystem.hpp>
 
 extern "C" {
 
@@ -44,7 +48,7 @@ RLogMill::RLogMill(const std::string& logfile)
     logmill_thread_state = LOGMILL_STATE_STARTUP;
     clog = 0;
 
-#if SDL_VERSION_ATLEAST(1,3,0)
+#if SDL_VERSION_ATLEAST(2,0,0)
     thread = SDL_CreateThread( logmill_thread, "logmill", this );
 #else
     thread = SDL_CreateThread( logmill_thread, this );
@@ -55,7 +59,6 @@ RLogMill::~RLogMill() {
 
     abort();
 
-    if(thread) SDL_KillThread(thread);
     if(clog) delete clog;
 }
 
@@ -79,6 +82,20 @@ void RLogMill::run() {
 
         clog = fetchLog(log_format);
 
+        // find first commit after start_timestamp if specified
+        if(clog != 0 && gGourceSettings.start_timestamp != 0) {
+
+            RCommit commit;
+
+            while(!gGourceSettings.shutdown && !clog->isFinished()) {
+
+                if(clog->nextCommit(commit) && commit.timestamp >= gGourceSettings.start_timestamp) {
+                    clog->bufferCommit(commit);
+                    break;
+                }
+            }
+        }
+
     } catch(SeekLogException& exception) {
         error = "unable to read log file";
     } catch(SDLAppException& exception) {
@@ -86,9 +103,14 @@ void RLogMill::run() {
     }
 
     if(!clog && error.empty()) {
-        if(SDLAppDirExists(logfile)) {
+        if(boost::filesystem::is_directory(logfile)) {
             if(!log_format.empty()) {
-                error = "failed to generate log file";
+                
+                if(gGourceSettings.start_timestamp || gGourceSettings.stop_timestamp) {
+                    error = "failed to generate log file for the specified time period";
+                } else {
+                    error = "failed to generate log file";
+                }
 #ifdef _WIN32
             // no error - should trigger help message
             } else if(gGourceSettings.default_path && boost::filesystem::exists("./gource.exe")) {
@@ -106,12 +128,13 @@ void RLogMill::run() {
 }
 
 void RLogMill::abort() {
+    if(!thread) return;
+
     // TODO: make abort nicer by notifying the log process
     //       we want to shutdown
-
-    while(logmill_thread_state <= LOGMILL_STATE_FETCHING) {
-        SDL_Delay(100);
-    }
+    SDL_WaitThread(thread, 0);
+    
+    thread = 0;
 }
 
 bool RLogMill::isFinished() {
@@ -129,10 +152,11 @@ std::string RLogMill::getError() {
 
 RCommitLog* RLogMill::getLog() {
 
-    while(logmill_thread_state <= LOGMILL_STATE_FETCHING) {
-        SDL_Delay(100);
+    if(thread != 0) {
+        SDL_WaitThread(thread, 0);
+        thread = 0;        
     }
-
+    
     return clog;
 }
 

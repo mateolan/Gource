@@ -5,7 +5,7 @@
 
                 Copyright (C) 2009 Andrew Caudwell
 
-                  http://gource.googlecode.com/
+                         http://gource.io
 
 Contents
 ========
@@ -53,6 +53,22 @@ options:
 
     --transparent
             Make the background transparent. Only really useful for screenshots.
+
+    --start-date 'YYYY-MM-DD hh:mm:ss +tz'
+            Start with the first entry after the supplied date and optional time.
+
+            If a time zone offset isn't specified the local time zone is used.
+
+            Example accepted formats:
+
+                "2012-06-30"
+                "2012-06-30 12:00"
+                "2012-06-30 12:00:00 +12"
+
+    --stop-date 'YYYY-MM-DD hh:mm:ss +tz'
+            Stop after the last entry prior to the supplied date and optional time.
+
+            Uses the same format as --start-date.
 
     -p, --start-position POSITION
             Begin at some position in the log (between 0.0 and 1.0 or 'random').
@@ -144,14 +160,26 @@ options:
     --selection-colour FFFFFF
             Font colour for selected users and files.
 
+    --filename-colour FFFFFF
+            Font colour for filenames.
+
     --dir-colour FFFFFF
             Font colour for directories.
+
+    --dir-name-depth DEPTH
+            Draw names of directories down to a specific depth in the tree.
+
+    --filename-time SECONDS
+            Duration to keep filenames on screen (>= 2.0).
+
+    --file-extensions
+            Show filename extensions only.
 
     --file-filter REGEX
             Filter out any files matching a specified regular expression.
 
-    --file-extensions
-            Show filename extensions only.
+    --file-show-filter REGEX
+            Show only files matching this regular expression.
 
     --user-filter REGEX
             Filter out any users matching a specified regular expression.
@@ -201,7 +229,7 @@ options:
             Time users take to come to a halt.
 
     --user-scale SCALE
-            Change scale of users.
+            Change scale of user avatars.
 
     --camera-mode MODE
             Camera mode (overview,track).
@@ -328,14 +356,14 @@ Recording Videos:
 
 See the guide on the homepage for examples of recording videos with Gource:
 
-    http://code.google.com/p/gource/wiki/Videos
+    https://github.com/acaudwell/Gource/wiki/Videos
 
 More Information:
 
 Visit the Gource homepage for guides and examples of using Gource with various
 version control systems:
 
-    http://code.google.com/p/gource/
+    http://gource.io
 
 Interface:
 
@@ -358,16 +386,21 @@ Interactive keyboard commands:
 
     (V)   Toggle camera mode
     (C)   Displays Gource logo
-    (K)   Toggle file extension key.
+    (K)   Toggle file extension key
     (M)   Toggle mouse visibility
-    (N)   Jump forward in time to next log entry.
-    (S)   Randomize colours.
-    (+-)  Adjust simulation speed.
-    (<>)  Adjust time scale.
+    (N)   Jump forward in time to next log entry
+    (S)   Randomize colours
+    (D)   Toggle directory name display mode
+    (F)   Toggle file name display mode
+    (U)   Toggle user name display mode
+    (G)   Toggle display of users
+    (T)   Toggle display of directory tree edges
+    (R)   Toggle display of root directory edges
+    (+-)  Adjust simulation speed
+    (<>)  Adjust time scale
     (TAB) Cycle through visible users
-
-    (Alt+Enter) Toggle Fullscreen
-
+    (F12) Screenshot
+    (Alt+Enter) Fullscreen toggle
     (ESC) Quit
 
 4. Copyright

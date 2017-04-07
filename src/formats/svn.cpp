@@ -16,17 +16,39 @@
 */
 
 #include "svn.h"
+#include "../gource_settings.h"
+
+#include <boost/format.hpp>
+
+#ifdef HAVE_LIBTINYXML
+#include <tinyxml.h>
+#else
+#include "../tinyxml/tinyxml.h"
+#endif
 
 Regex svn_xml_tag("^<\\??xml");
 Regex svn_logentry_start("^<logentry");
 Regex svn_logentry_end("^</logentry>");
 Regex svn_logentry_timestamp("(\\d{4})-(\\d{2})-(\\d{2})T(\\d{2}):(\\d{2}):(\\d{2})");
 
-std::string gGourceSVNLogCommand = "svn log -r 1:HEAD --xml --verbose --quiet";
+std::string SVNCommitLog::logCommand() {
+
+    std::string start = (!gGourceSettings.start_date.empty())
+        ? str(boost::format("{%s}") % gGourceSettings.start_date) : "1";
+
+    std::string stop  = (!gGourceSettings.stop_date.empty())
+        ? str(boost::format("{%s}") % gGourceSettings.stop_date) : "HEAD";
+
+    std::string range = str(boost::format("%s:%s") % start % stop);
+
+    std::string log_command = str(boost::format("svn log -r %s --xml --verbose --quiet") % range);
+
+    return log_command;
+}
 
 SVNCommitLog::SVNCommitLog(const std::string& logfile) : RCommitLog(logfile, '<') {
 
-    log_command = gGourceSVNLogCommand;
+    log_command = logCommand();
 
     //can generate log from directory
     if(!logf && is_dir) {
@@ -73,7 +95,7 @@ BaseLog* SVNCommitLog::generateLog(const std::string& dir) {
     }
 
     char cmd_buff[2048];
-    sprintf(cmd_buff, "%s > %s", command.c_str(), temp_file.c_str());
+    snprintf(cmd_buff, 2048, "%s > %s", command.c_str(), temp_file.c_str());
 
     int command_rc = systemCommand(cmd_buff);
 
@@ -223,9 +245,9 @@ bool SVNCommitLog::parseCommit(RCommit& commit) {
     TiXmlElement* authorE = leE->FirstChildElement("author");
 
     if(authorE != 0) {
-
-        std::string author(authorE->GetText());
-
+        // GetText() may return NULL, causing author instantiation to crash.
+        std::string author;
+        if(authorE->GetText()) author = authorE->GetText();
         if(author.empty()) author = "Unknown";
 
         commit.username = author;

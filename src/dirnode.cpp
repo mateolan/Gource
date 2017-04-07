@@ -214,12 +214,19 @@ void RDirNode::setParent(RDirNode* parent) {
     this->parent = parent;
 
     adjustPath();
+    adjustDepth();
+}
 
-    //set depth
+void RDirNode::adjustDepth() {
+
     if(parent == 0) {
-        depth = 1.0;
+        depth = 1;
     } else {
         depth = parent->getDepth() + 1;
+    }
+
+    for(RDirNode* child : children) {
+        child->adjustDepth();
     }
 }
 
@@ -308,7 +315,7 @@ bool RDirNode::removeFile(RFile* f) {
 void RDirNode::printFiles() {
     for(std::list<RFile*>::iterator it = files.begin(); it != files.end(); it++) {
         RFile* file = (*it);
-        fprintf(stderr, "%s: %s %s%s%s\n", getPath().c_str(), file->fullpath.c_str() , file->isExpiring() ? "expiring " : "", file->isRemoving() ? "removing " : "", file->isHidden() ? "hidden " : "");
+        fprintf(stderr, "%s: %s %s\n", getPath().c_str(), file->fullpath.c_str() , file->isHidden() ? "hidden " : "");
     }
 }
 
@@ -575,7 +582,7 @@ void RDirNode::calcRadius() {
     //this->dir_radius_sqrt = sqrt(dir_radius); //dir_radius_sqrt is not used
 
 //    this->parent_radius = std::max(1.0, parent_circ / PI);
-    this->parent_radius = std::max(1.0, sqrt(total_file_area) * gGourceDirPadding);
+    this->parent_radius = std::max(1.0f, (float) sqrt(total_file_area) * gGourceDirPadding);
 }
 
 float RDirNode::distanceToParent() const{
@@ -916,6 +923,7 @@ void RDirNode::logic(float dt) {
 void RDirNode::drawDirName(FXFont& dirfont) const{
     if(parent==0) return;
     if(gGourceSettings.hide_dirnames) return;
+    if(gGourceSettings.dir_name_depth > 0 && gGourceSettings.dir_name_depth < (depth-1)) return;
 
     if(!gGourceSettings.highlight_dirs && since_last_node_change > 5.0) return;
 

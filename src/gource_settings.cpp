@@ -19,9 +19,18 @@
 #include "core/sdlapp.h"
 
 #include <boost/filesystem.hpp>
+#include <boost/format.hpp>
 #include <boost/algorithm/string.hpp>
 
 #include "core/utf8/utf8.h"
+#include <time.h>
+
+#include "formats/hg.h"
+#include "formats/git.h"
+#include "formats/bzr.h"
+#include "formats/cvs-exp.h"
+#include "formats/cvs2cl.h"
+#include "formats/svn.h"
 
 GourceSettings gGourceSettings;
 
@@ -30,7 +39,7 @@ void GourceSettings::help(bool extended_help) {
 
 #ifdef _WIN32
     //resize window to fit help message
-    SDLApp::resizeConsole(820);
+    SDLApp::resizeConsole(730);
     SDLApp::showConsole(true);
 #endif
 
@@ -44,7 +53,9 @@ void GourceSettings::help(bool extended_help) {
     printf("      --multi-sampling             Enable multi-sampling\n");
     printf("      --no-vsync                   Disable vsync\n\n");
 
-    printf("  -p, --start-position POSITION    Begin at some position (0.0-1.0 or 'random')\n");
+    printf("  --start-date 'YYYY-MM-DD hh:mm:ss +tz'  Start at a date and optional time\n");
+    printf("  --stop-date  'YYYY-MM-DD hh:mm:ss +tz'  Stop at a date and optional time\n\n");
+    printf("  -p, --start-position POSITION    Start at some position (0.0-1.0 or 'random')\n");
     printf("      --stop-position  POSITION    Stop at some position\n");
     printf("  -t, --stop-at-time SECONDS       Stop after a specified number of seconds\n");
     printf("      --stop-at-end                Stop at end of the log\n");
@@ -65,13 +76,13 @@ void GourceSettings::help(bool extended_help) {
     printf("  --default-user-image IMAGE       Default user image file\n");
     printf("  --colour-images                  Colourize user images\n\n");
 
-    printf("  -i, --file-idle-time SECONDS     Time files remain idle (default: 60)\n\n");
+    printf("  -i, --file-idle-time SECONDS     Time files remain idle (default: 0)\n\n");
 
-    printf("  --max-files NUMBER       Max number of files or 0 for no limit\n");
-    printf("  --max-file-lag SECONDS   Max time files of a commit can take to appear\n\n");
+    printf("  --max-files NUMBER      Max number of files or 0 for no limit\n");
+    printf("  --max-file-lag SECONDS  Max time files of a commit can take to appear\n\n");
 
-    printf("  --log-command VCS        Show the VCS log command (git,svn,hg,bzr,cvs2cl)\n");
-    printf("  --log-format  VCS        Specify the log format (git,svn,hg,bzr,cvs2cl,custom)\n\n");
+    printf("  --log-command VCS       Show the VCS log command (git,svn,hg,bzr,cvs2cl)\n");
+    printf("  --log-format  VCS       Specify the log format (git,svn,hg,bzr,cvs2cl,custom)\n\n");
 
     printf("  --load-config CONF_FILE  Load a config file\n");
     printf("  --save-config CONF_FILE  Save a config file with the current options\n\n");
@@ -116,7 +127,8 @@ if(extended_help) {
     printf("  --transparent            Make the background transparent\n\n");
 
     printf("  --user-filter REGEX      Ignore usernames matching this regex\n");
-    printf("  --file-filter REGEX      Ignore files matching this regex\n\n");
+    printf("  --file-filter REGEX      Ignore files matching this regex\n");
+    printf("  --file-show-filter REGEX Show only files matching this regex\n\n");
 
     printf("  --user-friction SECONDS  Change the rate users slow down (default: 0.67)\n");
     printf("  --user-scale SCALE       Change scale of users (default: 1.0)\n");
@@ -126,9 +138,15 @@ if(extended_help) {
     printf("  --highlight-dirs         Highlight the names of all directories\n");
     printf("  --highlight-user USER    Highlight the names of a particular user\n");
     printf("  --highlight-users        Highlight the names of all users\n\n");
+
     printf("  --highlight-colour       Font colour for highlighted users in hex.\n");
     printf("  --selection-colour       Font colour for selected users and files.\n");
+    printf("  --filename-colour        Font colour for filenames.\n");
     printf("  --dir-colour             Font colour for directories.\n\n");
+
+    printf("  --dir-name-depth DEPTH   Draw names of directories down to a specific depth.\n\n");
+
+    printf("  --filename-time SECONDS  Duration to keep filenames on screen (default: 4.0)\n\n");
 
     printf("  --caption-file FILE         Caption file\n");
     printf("  --caption-size SIZE         Caption font size\n");
@@ -163,6 +181,7 @@ GourceSettings::GourceSettings() {
     repo_count = 0;
     file_graphic = 0;
     log_level = LOG_LEVEL_OFF;
+    shutdown = false;
 
     setGourceDefaults();
 
@@ -252,9 +271,11 @@ GourceSettings::GourceSettings() {
     arg_types["hash-seed"] = "int";
 
     arg_types["user-filter"]    = "multi-value";
-    arg_types["file-filter"]    = "multi-value";
     arg_types["follow-user"]    = "multi-value";
     arg_types["highlight-user"] = "multi-value";
+
+    arg_types["file-filter"]      = "multi-value";
+    arg_types["file-show-filter"] = "multi-value";
 
     arg_types["log-level"]          = "string";
     arg_types["background-image"]   = "string";
@@ -274,6 +295,8 @@ GourceSettings::GourceSettings() {
     arg_types["log-format"]         = "string";
     arg_types["git-branch"]         = "string";
     arg_types["start-position"]     = "string";
+    arg_types["start-date"]         = "string";
+    arg_types["stop-date"]          = "string";
     arg_types["stop-position"]      = "string";
     arg_types["crop"]               = "string";
     arg_types["hide"]               = "string";
@@ -292,7 +315,10 @@ GourceSettings::GourceSettings() {
     arg_types["caption-colour"]     = "string";
     arg_types["caption-offset"]     = "int";
 
+    arg_types["filename-colour"]    = "string";
+    arg_types["filename-time"]      = "float";
 
+    arg_types["dir-name-depth"]     = "int";
 }
 
 void GourceSettings::setGourceDefaults() {
@@ -314,6 +340,12 @@ void GourceSettings::setGourceDefaults() {
     hide_mouse     = false;
     hide_root      = false;
 
+    start_timestamp = 0;
+    start_date = "";
+
+    stop_timestamp = 0;
+    stop_date = "";
+
     start_position = 0.0f;
     stop_position  = 0.0f;
     stop_at_time   = -1.0f;
@@ -327,7 +359,7 @@ void GourceSettings::setGourceDefaults() {
 
     auto_skip_seconds = 3.0f;
     days_per_second   = 0.1f; // TODO: check this is right
-    file_idle_time    = 60.0f;
+    file_idle_time    = 0.0f;
     time_scale        = 1.0f;
 
     loop = false;
@@ -364,6 +396,8 @@ void GourceSettings::setGourceDefaults() {
     highlight_colour = vec3(1.0f);
     selection_colour = vec3(1.0, 1.0, 0.3f);
 
+    dir_name_depth = 0;
+
     elasticity = 0.0f;
 
     git_branch = "";
@@ -390,6 +424,9 @@ void GourceSettings::setGourceDefaults() {
     caption_offset   = 0;
     caption_colour   = vec3(1.0f, 1.0f, 1.0f);
 
+    filename_colour  = vec3(1.0f, 1.0f, 1.0f);
+    filename_time = 4.0f;
+
     gStringHashSeed = 31;
 
     //delete file filters
@@ -397,6 +434,13 @@ void GourceSettings::setGourceDefaults() {
         delete (*it);
     }
     file_filters.clear();
+
+    //delete file whitelists
+    for(std::vector<Regex*>::iterator it = file_show_filters.begin(); it != file_show_filters.end(); it++) {
+        delete (*it);
+    }    
+    file_show_filters.clear();
+
     file_extensions = false;
 
     //delete user filters
@@ -433,11 +477,11 @@ void GourceSettings::commandLineOption(const std::string& name, const std::strin
     }
 
     if(name == "git-log-command" || log_command == "git") {
-        SDLAppInfo(gGourceGitLogCommand);
+        SDLAppInfo(GitCommitLog::logCommand());
     }
 
     if(name == "cvs-exp-command" || log_command == "cvs-exp") {
-        SDLAppInfo(gGourceCvsExpLogCommand);
+        SDLAppInfo(CVSEXPCommitLog::logCommand());
     }
 
     if(log_command == "cvs") {
@@ -445,21 +489,19 @@ void GourceSettings::commandLineOption(const std::string& name, const std::strin
     }
 
     if(name == "cvs2cl-command" || log_command == "cvs2cl") {
-        SDLAppInfo(gGourceCVS2CLLogCommand);
+        SDLAppInfo(CVS2CLCommitLog::logCommand());
     }
 
     if(name == "svn-log-command" || log_command == "svn") {
-        SDLAppInfo(gGourceSVNLogCommand);
+        SDLAppInfo(SVNCommitLog::logCommand());
     }
 
     if(name == "hg-log-command" || log_command == "hg") {
-        std::string command = gGourceMercurialCommand();
-        SDLAppInfo(command);
+        SDLAppInfo(MercurialLog::logCommand());
     }
 
     if(name == "bzr-log-command" || log_command == "bzr") {
-        std::string command = gGourceBzrLogCommand();
-        SDLAppInfo(command);
+        SDLAppInfo(BazaarLog::logCommand());
     }
 
     if(name == "output-custom-log" && value.size() > 0) {
@@ -607,7 +649,15 @@ void GourceSettings::importGourceSettings(ConfFile& conffile, ConfSection* gourc
 
         if(!entry->hasValue()) conffile.missingValueException(entry);
 
-        git_branch = entry->getString();
+        Regex branch_regex("^(?!-)[/\\w.,;_=+{}\\[\\]-]+$");
+
+        std::string branch = entry->getString();
+
+        if(branch_regex.match(branch)) {
+            git_branch = branch;
+        } else {
+            conffile.invalidValueException(entry);
+        }
     }
 
     if(gource_settings->getBool("colour-images")) {
@@ -773,6 +823,34 @@ void GourceSettings::importGourceSettings(ConfFile& conffile, ConfSection* gourc
             caption_colour /= 255.0f;
         } else {
             conffile.invalidValueException(entry);
+        }
+    }
+
+    if((entry = gource_settings->getEntry("filename-colour")) != 0) {
+        if(!entry->hasValue()) conffile.entryException(entry, "specify filename colour (FFFFFF)");
+
+	int r,g,b;
+
+	std::string colstring = entry->getString();
+
+	if(entry->isVec3()) {
+	    filename_colour = entry->getVec3();
+	} else if(colstring.size()==6 && sscanf(colstring.c_str(), "%02x%02x%02x", &r, &g, &b) == 3) {
+            filename_colour = vec3(r,g,b);
+            filename_colour /= 255.0f;
+        } else {
+            conffile.invalidValueException(entry);
+        }
+    }
+
+    if((entry = gource_settings->getEntry("filename-time")) != 0) {
+
+        if(!entry->hasValue()) conffile.entryException(entry, "specify duration to keep files on screen (float)");
+
+        filename_time = entry->getFloat();
+
+        if(filename_time<2.0f) {
+            conffile.entryException(entry, "filename-time must be >= 2.0");
         }
     }
 
@@ -991,9 +1069,6 @@ void GourceSettings::importGourceSettings(ConfFile& conffile, ConfSection* gourc
         if(file_idle_time<0.0f || (file_idle_time == 0.0f && file_idle_str[0] != '0') ) {
             conffile.invalidValueException(entry);
         }
-        if(file_idle_time==0.0f) {
-            file_idle_time = 86400.0f;
-        }
     }
 
     if((entry = gource_settings->getEntry("user-idle-time")) != 0) {
@@ -1016,6 +1091,49 @@ void GourceSettings::importGourceSettings(ConfFile& conffile, ConfSection* gourc
 
         if(time_scale <= 0.0f || time_scale > 4.0f) {
             conffile.entryException(entry, "time-scale outside of range 0.0 - 4.0");
+        }
+    }
+
+    if((entry = gource_settings->getEntry("start-date")) != 0) {
+
+        if(!entry->hasValue()) conffile.entryException(entry, "specify start-date (YYYY-MM-DD hh:mm:ss)");
+
+        std::string start_date_string = entry->getString();
+
+        if(parseDateTime(start_date_string, start_timestamp)) {
+
+            char datestr[256];
+            strftime(datestr, 256, "%Y-%m-%d", localtime ( &start_timestamp ));
+            start_date = datestr;
+
+        } else {
+            conffile.invalidValueException(entry);
+        }
+    }
+
+    if((entry = gource_settings->getEntry("stop-date")) != 0) {
+
+        if(!entry->hasValue()) conffile.entryException(entry, "specify stop-date (YYYY-MM-DD hh:mm:ss)");
+
+        std::string end_date_string = entry->getString();
+
+        if(parseDateTime(end_date_string, stop_timestamp)) {
+
+            struct tm * timeinfo;
+            timeinfo = localtime ( &stop_timestamp );
+
+            time_t stop_timestamp_rounded = stop_timestamp;
+
+            if(timeinfo->tm_hour > 0 || timeinfo->tm_min > 0 || timeinfo->tm_sec > 0) {
+                stop_timestamp_rounded += 60*60*24;
+            }
+
+            char datestr[256];
+            strftime(datestr, 256, "%Y-%m-%d", localtime ( &stop_timestamp_rounded ));
+            stop_date = datestr;
+
+        } else {
+            conffile.invalidValueException(entry);
         }
     }
 
@@ -1227,6 +1345,29 @@ void GourceSettings::importGourceSettings(ConfFile& conffile, ConfSection* gourc
         }
     }
 
+    if((entry = gource_settings->getEntry("file-show-filter")) != 0) {
+
+        ConfEntryList* filters = gource_settings->getEntries("file-show-filter");
+
+        for(ConfEntryList::iterator it = filters->begin(); it != filters->end(); it++) {
+
+            entry = *it;
+
+            if(!entry->hasValue()) conffile.entryException(entry, "specify file-show-filter (regex)");
+
+            std::string filter_string = entry->getString();
+
+            Regex* r = new Regex(filter_string, 1);
+
+            if(!r->isValid()) {
+                delete r;
+                conffile.entryException(entry, "invalid file-show-filter regular expression");
+            }
+
+            file_show_filters.push_back(r);
+        }
+    }
+
     if((entry = gource_settings->getEntry("user-filter")) != 0) {
 
         ConfEntryList* filters = gource_settings->getEntries("user-filter");
@@ -1247,6 +1388,17 @@ void GourceSettings::importGourceSettings(ConfFile& conffile, ConfSection* gourc
             }
 
             user_filters.push_back(r);
+        }
+    }
+
+    if((entry = gource_settings->getEntry("dir-name-depth")) != 0) {
+
+        if(!entry->hasValue()) conffile.entryException(entry, "specify dir-name-depth (depth)");
+
+        dir_name_depth = entry->getInt();
+
+        if(dir_name_depth <= 0) {
+            conffile.invalidValueException(entry);
         }
     }
 
@@ -1275,26 +1427,17 @@ void GourceSettings::importGourceSettings(ConfFile& conffile, ConfSection* gourc
 #endif
 
         std::cin.clear();
+
+    } else if(!path.empty() && path != ".") {
+
+        //remove trailing slash
+        if(path[path.size()-1] == '\\' || path[path.size()-1] == '/') {
+            path.resize(path.size()-1);
+        }
+
+        // check path exists
+        if(!boost::filesystem::exists(path)) {
+            throw ConfFileException(str(boost::format("'%s' does not appear to be a valid file or directory") % path), "", 0);
+        }
     }
-
-    //remove trailing slash and check if path is a directory
-    if(path.size() &&
-    (path[path.size()-1] == '\\' || path[path.size()-1] == '/')) {
-        path = path.substr(0,path.size()-1);
-    }
-
-#ifdef _WIN32
-    //on windows, pre-open console window if we think this is a directory the
-    //user is trying to open, as system() commands will create a console window
-    //if there isn't one anyway.
-
-    bool isdir = false;
-
-    if(path.size()>0) {
-        struct stat fileinfo;
-        int rc = stat(path.c_str(), &fileinfo);
-
-        if(rc==0 && fileinfo.st_mode & S_IFDIR) isdir = true;
-    }
-#endif
 }

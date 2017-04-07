@@ -122,7 +122,6 @@ bool RCommitLog::checkFirstChar(int firstChar, std::istream& stream) {
 }
 
 bool RCommitLog::checkFormat() {
-
     if(!success) return false;
 
     //read a commit to see if the log is in the correct format
@@ -208,6 +207,11 @@ bool RCommitLog::findNextCommit(RCommit& commit, int attempts) {
     return false;
 }
 
+void RCommitLog::bufferCommit(RCommit& commit) {
+    lastCommit = commit;
+    buffered = true;
+}
+
 bool RCommitLog::nextCommit(RCommit& commit, bool validate) {
 
     if(buffered) {
@@ -215,6 +219,9 @@ bool RCommitLog::nextCommit(RCommit& commit, bool validate) {
         buffered = false;
         return true;
     }
+
+    // ensure commit is re-initialized
+    commit = RCommit();
 
     bool success = parseCommit(commit);
 
@@ -233,13 +240,17 @@ bool RCommitLog::isFinished() {
     return false;
 }
 
+bool RCommitLog::hasBufferedCommit() {
+    return buffered;
+}
+
 //create temp file
 void RCommitLog::createTempLog() {
 
     std::string tempdir;
 
 #ifdef _WIN32
-    DWORD tmplen = GetTempPath(0, "");
+    DWORD tmplen = GetTempPath(0, 0);
 
     if(tmplen == 0) return;
 
@@ -312,6 +323,18 @@ void RCommit::addFile(const std::string& filename, const  std::string& action, c
             Regex* r = *ri;
 
             if(r->match(filename)) {
+                return;
+            }
+        }
+    }
+
+    // Only allow files that have been whitelisted
+    if(!gGourceSettings.file_show_filters.empty()) {
+
+        for(std::vector<Regex*>::iterator ri = gGourceSettings.file_show_filters.begin(); ri != gGourceSettings.file_show_filters.end(); ri++) {
+            Regex* r = *ri;
+
+            if(!r->match(filename)) {
                 return;
             }
         }

@@ -3,9 +3,9 @@
 
 AC_PREREQ(2.61)
 
-AC_INIT(Gource, 0.41, [acaudwell@gmail.com])
+AC_INIT(Gource, 0.45, [acaudwell@gmail.com])
+AC_CONFIG_AUX_DIR([build-aux])
 AC_CONFIG_SRCDIR([src/main.h])
-
 AM_INIT_AUTOMAKE([dist-bzip2 foreign subdir-objects])
 
 AC_CANONICAL_HOST
@@ -21,6 +21,7 @@ AS_IF([test "$with_x" != yes], [
     case "$host_os" in
     darwin*)
         with_x="no"
+        LIBS="$LIBS -framework CoreFoundation"
     ;;
     esac
 ], [])
@@ -35,10 +36,19 @@ LIBS="$LIBS $GL_LIBS $GLU_LIBS"
 PKG_CHECK_MODULES([FT2], [freetype2 >= 9.0.3])
 PKG_CHECK_MODULES([PCRE], [libpcre])
 PKG_CHECK_MODULES([GLEW], [glew])
-PKG_CHECK_MODULES([SDL], [sdl >= 1.2.10 SDL_image])
 
-CPPFLAGS="${CPPFLAGS} ${FT2_CFLAGS} ${PCRE_CFLAGS} ${GLEW_CFLAGS} ${SDL_CFLAGS}"
-LIBS="${LIBS} ${FT2_LIBS} ${PCRE_LIBS} ${GLEW_LIBS} ${SDL_LIBS}"
+PKG_CHECK_MODULES([SDL2], [sdl2 SDL2_image], [have_sdl2=yes], [have_sdl2=no])
+
+# use SDL 2 if available, otherwise use SDL 1.2
+if test "x$have_sdl2" = xno; then
+    AC_MSG_WARN([SDL 2.0 libraries not found. Trying SDL 1.2. Please note SDL 1.2 support is deprecated]) 
+    PKG_CHECK_MODULES([SDL], [sdl >= 1.2.10 SDL_image])
+fi
+
+PKG_CHECK_MODULES([PNG], [libpng >= 1.2])
+
+CPPFLAGS="${CPPFLAGS} ${FT2_CFLAGS} ${PCRE_CFLAGS} ${GLEW_CFLAGS} ${SDL2_CFLAGS} ${SDL_CFLAGS} ${PNG_CFLAGS}"
+LIBS="${LIBS} ${FT2_LIBS} ${PCRE_LIBS} ${GLEW_LIBS} ${SDL2_LIBS} ${SDL_LIBS} ${PNG_LIBS}"
 
 AC_CHECK_FUNCS([IMG_LoadPNG_RW], , AC_MSG_ERROR([SDL_image with PNG support required. Please see INSTALL]))
 AC_CHECK_FUNCS([IMG_LoadJPG_RW], , AC_MSG_ERROR([SDL_image with JPEG support required. Please see INSTALL]))

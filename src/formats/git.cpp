@@ -16,6 +16,7 @@
 */
 
 #include "git.h"
+#include "../gource_settings.h"
 
 // parse git log entries
 
@@ -24,19 +25,34 @@
 // - 'user:' prefix allows us to quickly tell if the log is the wrong format
 //   and try a different format (eg cvs-exp)
 
-std::string gGourceGitLogCommand = "git log "
+std::string GitCommitLog::logCommand() {
+
+    std::string log_command = "git log "
     "--pretty=format:user:%aN%n%ct "
     "--reverse --raw --encoding=UTF-8 "
     "--no-renames";
 
-GitCommitLog::GitCommitLog(const std::string& logfile) : RCommitLog(logfile, 'u') {
+    if(!gGourceSettings.start_date.empty()) {
+        log_command += " --since ";
+        log_command += gGourceSettings.start_date;
+    }
 
-    log_command = gGourceGitLogCommand;
+    if(!gGourceSettings.stop_date.empty()) {
+        log_command += " --until ";
+        log_command += gGourceSettings.stop_date;
+    }
 
-    if(gGourceSettings.git_branch.size()>0) {
+    if(!gGourceSettings.git_branch.empty()) {
         log_command += " ";
         log_command += gGourceSettings.git_branch;
     }
+
+    return log_command;
+}
+
+GitCommitLog::GitCommitLog(const std::string& logfile) : RCommitLog(logfile, 'u') {
+
+    log_command = logCommand();
 
     //can generate log from directory
     if(!logf && is_dir) {
@@ -80,7 +96,11 @@ BaseLog* GitCommitLog::generateLog(const std::string& dir) {
     }
 
     char cmd_buff[2048];
-    sprintf(cmd_buff, "%s > %s", command.c_str(), temp_file.c_str());
+    int written = snprintf(cmd_buff, 2048, "%s > %s", command.c_str(), temp_file.c_str());
+
+    if(written < 0 || written >= 2048) {
+        return 0;
+    }
 
     int command_rc = systemCommand(cmd_buff);
 

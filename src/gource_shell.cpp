@@ -30,8 +30,6 @@ GourceShell::GourceShell(ConfFile* conf, FrameExporter* exporter) {
 
     next = false;
 
-    shutdown = false;
-
     gource = 0;
     gource_settings = conf->getSections("gource")->begin();
 
@@ -93,12 +91,12 @@ void GourceShell::keyPress(SDL_KeyboardEvent *e) {
     //Quit demo if the user presses ESC
     if (e->type == SDL_KEYDOWN) {
 
-#if SDL_VERSION_ATLEAST(1,3,0)
-        bool key_escape = e->keysym.scancode == SDL_SCANCODE_ESCAPE;
-	bool key_return = e->keysym.scancode == SDL_SCANCODE_RETURN;
+#if SDL_VERSION_ATLEAST(2,0,0)
+        bool key_escape = e->keysym.sym == SDLK_ESCAPE;
+        bool key_return = e->keysym.sym == SDLK_RETURN;
 #else
         bool key_escape = e->keysym.unicode == SDLK_ESCAPE;
-	bool key_return = e->keysym.unicode == SDLK_RETURN;
+        bool key_return = e->keysym.unicode == SDLK_RETURN;
 #endif
 
         if (key_escape) {
@@ -107,8 +105,8 @@ void GourceShell::keyPress(SDL_KeyboardEvent *e) {
 
         if(key_return) {
 
-#if SDL_VERSION_ATLEAST(1,3,0)
-            Uint8* keystate = SDL_GetKeyboardState(NULL);
+#if SDL_VERSION_ATLEAST(2,0,0)
+            const Uint8* keystate = SDL_GetKeyboardState(NULL);
             if(keystate[SDL_SCANCODE_RALT] || keystate[SDL_SCANCODE_LALT]) {
 #else
             Uint8* keystate = SDL_GetKeyState(NULL);
@@ -131,7 +129,7 @@ void GourceShell::mouseMove(SDL_MouseMotionEvent *e) {
     if(gource!=0) gource->mouseMove(e);
 }
 
-#if SDL_VERSION_ATLEAST(1,3,0)
+#if SDL_VERSION_ATLEAST(2,0,0)
 void GourceShell::mouseWheel(SDL_MouseWheelEvent *e) {
     if(gource!=0) gource->mouseWheel(e);
 }
@@ -143,7 +141,7 @@ void GourceShell::mouseClick(SDL_MouseButtonEvent *e) {
 
 void GourceShell::quit() {
     if(gource!=0) gource->quit();
-    shutdown=true;
+    gGourceSettings.shutdown=true;
 }
 
 Gource* GourceShell::getNext() {
@@ -152,7 +150,7 @@ Gource* GourceShell::getNext() {
         transition_interval = 1.0f;
     }
 
-    if(shutdown || gource_settings == conf->getSections("gource")->end()) {
+    if(gGourceSettings.shutdown || gource_settings == conf->getSections("gource")->end()) {
 
         // if we are done, delete gource and replace it with nothing
         if(gource != 0) {

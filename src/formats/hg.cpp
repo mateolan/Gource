@@ -17,21 +17,45 @@
 
 #include "hg.h"
 #include "../core/sdlapp.h"
+#include "../gource_settings.h"
+
+#include <boost/format.hpp>
 
 Regex hg_regex("^([0-9]+) -?[0-9]+\\|([^|]+)\\|([ADM]?)\\|(.+)$");
 
-// parse Mercurial log entries (using the gource.style template)
+std::string MercurialLog::logCommand() {
 
-std::string gGourceMercurialCommand() {
-
+    // parse Mercurial log entries (using the gource.style template)
     std::string gource_style_path = gSDLAppResourceDir + std::string("gource.style");
 
-    return std::string("hg log -r 0:tip --style \"") + gource_style_path + std::string("\"");
+    std::string range =
+        // date range
+        (!gGourceSettings.start_date.empty() && !gGourceSettings.stop_date.empty()) ?
+          str(boost::format("--date '%s to %s'") % gGourceSettings.start_date % gGourceSettings.stop_date)
+
+        // start date only
+        : (!gGourceSettings.start_date.empty()) ?
+          str(boost::format("--date '>%s'") % gGourceSettings.start_date)
+
+        // stop date only
+        : (!gGourceSettings.stop_date.empty()) ?
+          str(boost::format("--date '<%s'") % gGourceSettings.stop_date)
+
+        // default
+        : "";
+
+    std::string log_command = str(boost::format("hg log %s -r 0:tip --style '%s'") % range % gource_style_path);
+
+#ifdef _WIN32
+    std::replace(log_command.begin(), log_command.end(), '\'', '"');
+#endif
+
+    return log_command;
 }
 
 MercurialLog::MercurialLog(const std::string& logfile) : RCommitLog(logfile) {
 
-    log_command = gGourceMercurialCommand();
+    log_command = logCommand();
 
     //can generate log from directory
     if(!logf && is_dir) {
@@ -64,7 +88,7 @@ BaseLog* MercurialLog::generateLog(const std::string& dir) {
     if(temp_file.size()==0) return 0;
 
     char cmd_buff[2048];
-    sprintf(cmd_buff, "%s -R \"%s\" > %s", command.c_str(), dir.c_str(), temp_file.c_str());
+    snprintf(cmd_buff, 2048, "%s -R \"%s\" > %s", command.c_str(), dir.c_str(), temp_file.c_str());
 
     int command_rc = systemCommand(cmd_buff);
 

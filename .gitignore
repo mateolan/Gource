@@ -2,6 +2,7 @@
 *.mpg
 *.mkv
 *.mp4
+gource-*.png
 .objs
 /gource
 /gource.exe
@@ -16,13 +17,9 @@ logs/*
 /aclocal.m4
 /autom4te.cache
 /configure
-/config.sub
-/config.guess
 /config.log
 /config.status
-/depcomp
-/install-sh
-/missing
+/build-aux
 *.swp
 *.d
 .deps
